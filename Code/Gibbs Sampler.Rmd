@@ -1,0 +1,157 @@
+---
+title: "HW9"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+Since
+$$ \sigma^2 \sim GAMMA(\alpha, \beta) $$,
+
+$$ \pi(\sigma^2) \sim \frac{1}{\sigma^2} \implies \pi(\sigma^2) \sim INVGAM(\alpha, \beta) $$
+$$ \pi(\mu, \sigma^2 | Y_1 ... Y_n) \propto \pi(\mu, \sigma^2, Y_1 ... Y_n) = f(Y_1 ... Y_n | \mu, \sigma^2)\pi(\sigma^2)\pi(\mu)$$
+$$ p(\mu | Y_1 ... Y_n, \sigma^2) \propto f(Y_1 ... Y_n | \mu, \sigma^2)\pi(\mu)\pi(\sigma^2) $$
+Given that these priors are independent,
+
+$$ p(\mu | Y_1 ... Y_n, \sigma^2) \propto f(Y_1 ... Y_n | \mu, \sigma^2)\pi(\mu)\ $$
+
+$$ \propto (e^-\frac{\sum(y_i - \mu)^2}{2\sigma^2})(e^-\frac{(\mu-\mu_0)^2}{2\sigma^2_0})$$
+$$ \propto e^(\frac{2n\bar{y}\mu}{2\sigma^2} - \frac{\mu^2 - 2\mu_0\mu}{2\sigma^2_0})$$
+$$ \propto e^(\mu(\frac{n\bar{y}}{\sigma^2}+\frac{\mu_0}{\sigma^2_0}) - \frac{\mu^2}{2}(\frac{n}{\sigma^2} + \frac{1}{\sigma^2_0}))$$
+Therefore,
+$$ p(\mu | Y_1 ... Y_n, \sigma^2) \sim N(\sigma^2_0 * (\frac{n\bar{y}}{\sigma^2} + \frac{\mu_0}{\sigma^2_0}, \frac{1}{\frac{n}{\sigma^2} + \frac{1}{\sigma^2_0}}) $$
+Given this, we can see that
+$$ \sigma^2_0 = \frac{1}{\frac{n}{\sigma^2} + \frac{1}{\sigma^2_0}}; \mu_0 = \sigma^2_0 * (\frac{n\bar{y}}{\sigma^2} + \frac{\mu_0}{\sigma^2_0})$$
+$$ p(\sigma^2 | Y_1 ... Y_n, \mu) \propto \sigma^{-n}e^(-\frac{\sum(y_i - \mu)^2}{2\sigma^2})\sigma^{-2\sigma-2}e^{\frac{-\beta}{\sigma^2}}$$
+$$ = \sigma^{-2(\alpha + \frac{n}{2})-2}e^{-\frac{\sum(y_i - \mu)^2 + \beta}{2\sigma^2}}$$
+From this, we can see that
+$$ p(\sigma^2 | Y_1 ... Y_n, \mu) \sim INVGAM(\alpha + \frac{n}{2}, \beta + \sum(Y_i - \mu)^2)$$
+```{r}
+
+data("ChickWeight")
+
+begin = which(ChickWeight$Time %in% c(0))
+missing = c()
+
+for (i in 1:(length(begin)-1)){
+
+  if (begin[i] != (begin[i+1]-12)){
+    missing = append(missing, c(begin[i]:(begin[i+1]-1)))
+  }
+  
+}
+```
+
+```{r}
+
+new_weight = ChickWeight$weight[-missing]
+new_diet = ChickWeight$Diet[-missing]
+diffs = c()
+one_diffs = c()
+two_diffs = c()
+three_diffs = c()
+four_diffs = c()
+diets = c()
+
+for (i in 1:length(new_weight)){
+  
+  if (i %% 12 == 0 & i > 0){
+    
+    diffs = append(diffs, (new_weight[i]-new_weight[i-11]))
+    
+    if (new_diet[i] == 1){
+      one_diffs = append(one_diffs, (new_weight[i]-new_weight[i-11]))
+      diets = append(diets, 1)
+    }
+    
+    if (new_diet[i] == 2){
+      two_diffs = append(two_diffs, (new_weight[i]-new_weight[i-11]))
+      diets = append(diets, 2)
+    }
+    
+    if (new_diet[i] == 3){
+      three_diffs = append(three_diffs, (new_weight[i]-new_weight[i-11]))
+      diets = append(diets, 3)
+    }
+    
+    if (new_diet[i] == 4){
+      four_diffs = append(four_diffs, (new_weight[i]-new_weight[i-11]))
+      diets = append(diets, 4)
+    }
+    
+  }
+  
+}
+
+```
+
+```{r}
+
+library(invgamma)
+
+mc_mat = matrix(nrow=10000,ncol=7)
+
+theta_c = c(0,0,0,0)
+mu_c = 0
+sig2_c = 1
+tau2_c = 1    
+
+a1 = 2.00001
+a2 = 2.00001
+b1 = a1-1
+b2 = a2-1
+mu0 = 0
+sig2mu = 100
+mc_mat[1,] = c(theta_c,mu_c,sig2_c,tau2_c)
+X = diffs
+
+Xbar<-c(mean(one_diffs), mean(two_diffs), mean(three_diffs), mean(four_diffs))
+n = length(diffs)
+for(i in 2:10000){
+  
+  # Theta
+  mean_tmp = sig2_c*mu_c/(sig2_c+n*tau2_c) + n*tau2_c*Xbar/(sig2_c+n*tau2_c)
+  var_tmp = sig2_c*tau2_c/(sig2_c+n*tau2_c)
+  theta_c = rnorm(4,mean=mean_tmp,sd=sqrt(var_tmp))
+  
+  # mu
+  mean_tmp = tau2_c*mu0/(tau2_c+2*sig2mu) + 2*sig2mu*mean(theta_c)/(tau2_c + 2*sig2mu)
+  var_tmp = sig2mu*tau2_c/(tau2_c + 2*sig2mu)
+  mu_c = rnorm(1,mean=mean_tmp,sd=sqrt(var_tmp))
+  
+  # sigma2
+  a_tmp = a1 +(n/2)
+  b_tmp = b1 + sum((X-rep(theta_c,each=45))^2)
+  sig2_c = rinvgamma(1,shape=a_tmp,scale=b_tmp)
+  
+  # tau2
+  a_tmp = a2 + (n/2)
+  b_tmp = b2 + sum((theta_c-mu_c)^2)
+  tau2_c = rinvgamma(1,shape=a_tmp,scale=b_tmp)
+  
+  mc_mat[i,] = c(theta_c,mu_c,sig2_c,tau2_c)
+}
+
+mc_mat<-mc_mat[-c(1:1000),]
+
+```
+
+```{r}
+par(mfrow=c(1,1))
+
+plot(density(mc_mat[,1]), xlim = c(130, 250))
+
+dtmp<-density(mc_mat[,2])
+points(dtmp$x,dtmp$y,col="blue",type="l")
+
+dtmp<-density(mc_mat[,3])
+points(dtmp$x,dtmp$y,col="red",type="l")
+
+dtmp<-density(mc_mat[,4])
+points(dtmp$x,dtmp$y,col="green",type="l")
+
+```
+
+
+
+From the distributions, it is clear that there is a difference in the change of weights in the chicks for each diet group. Group three has the highest change, followed by groups 4, 2 and then 1.
